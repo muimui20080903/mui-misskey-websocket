@@ -1,5 +1,4 @@
 use serde_json::{json, Map, Value};
-use std::error;
 use websocket::{
     client::sync::Client, stream::sync::NetworkStream, ClientBuilder, Message, OwnedMessage,
 };
@@ -10,10 +9,12 @@ async fn shuttle_main(
 ) -> Result<MyService, shuttle_runtime::Error> {
     // チャンネルへの接続ごとのid
     //  適当な文字列
-    let id = String::from("awf2nawo0w8a3");
+    let id: String = String::from("awf2nawo0w8a3");
     // MisskeyのストリーミングAPI(homeTimeLine)に接続
     let mut client: Client<Box<dyn NetworkStream + Send>> =
         connect_to_misskey_streaming_api(&id, &secrets).await;
+
+    println!("Connected to Misskey Streaming API");
 
     // メッセージの受信
     // ループしてメッセージを受信
@@ -47,9 +48,9 @@ async fn shuttle_main(
 
             // データがない場合
             Err(websocket::result::WebSocketError::NoDataAvailable) => {
-                //  println!("No data available, retrying...");
+                // println!("No data available, retrying...");
                 // 再接続処理
-                //  client = connect_to_misskey_streaming_api(&id,&secrets).await;
+                client = connect_to_misskey_streaming_api(&id, &secrets).await;
                 // ディレイ
                 std::thread::sleep(std::time::Duration::from_secs(1));
                 continue;
@@ -105,7 +106,7 @@ async fn connect_to_misskey_streaming_api(
         .connect(None)
         .expect("Failed to connect to Misskey Streaming API");
 
-    println!("Connected to Misskey Streaming API");
+    // println!("Connected to Misskey Streaming API");
 
     // チャンネル(homeTimeLine)に接続
     let message = generate_message_to_connect_hometimeline_ch(id);
@@ -139,12 +140,13 @@ fn is_target_note(
 ) -> bool {
     // bodyを取得
     let message_object = message_object["body"].as_object().unwrap();
-    // メッセージがノートであるかどうか
-    if message_object["type"] != "note" {
+
+    // メッセージがノートでない場合はfalseを返す
+    if message_object["type"].as_str().unwrap() != "note" {
         return false;
     }
 
-    // ファイルが添付されているかどうか
+    // ファイルが添付されていない場合はfalseを返す
     if message_object["body"]["files"]
         .as_array()
         .unwrap()
@@ -153,11 +155,11 @@ fn is_target_note(
         return false;
     }
 
-    // メッセージが指定ユーザーのものであるかどうか
-    let target_user_id = secrets
+    // メッセージが指定ユーザーのものでない場合はfalseを返す
+    let target_user_id: String = secrets
         .get("TARGET_USER_ID")
         .expect("TARGET_USER_ID must be set"); // やんよさんのID
-    if message_object["body"]["userId"] != target_user_id {
+    if message_object["body"]["userId"].as_str().unwrap() != target_user_id {
         return false;
     }
 
@@ -167,25 +169,46 @@ fn is_target_note(
 // Discordに送信するメッセージを生成
 fn generate_note_info(message_object: &serde_json::Map<String, Value>) -> String {
     // メッセージの情報を取得
-    let uri: &str = message_object["body"]["body"]["uri"].as_str().unwrap();
 
+    // ノートのurl
+    let note_id: String = message_object["body"]["body"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let url: String = format!(
+        "[note](https://misskey.io/notes/{note_id})",
+        note_id = note_id
+    );
+
+    // 添付ファイルのurl
     let files: String = message_object["body"]["body"]["files"]
-        .as_array()
+        .as_array() // 配列として受け取る
         .unwrap()
         .iter()
-        .map(|file| file["url"].as_str().unwrap())
-        .collect::<Vec<&str>>()
+        .enumerate() // インデックスを取得
+        // インデックスとファイル情報を結合してMarkdownの文字列に変換
+        .map(|(index, file)| {
+            let img_url = file["url"].as_str().unwrap();
+            let img_name = format!(
+                "[{index}枚目]({img_url})",
+                index = index + 1,
+                img_url = img_url
+            );
+            img_name
+        })
+        // 改行で結合
+        .collect::<Vec<String>>()
         .join("\n");
 
     // メッセージの情報を結合して戻り値として返す
-    format!("{uri}\n{files}", uri = uri, files = files)
+    format!("{uri}\n{files}", uri = url, files = files)
 }
 
 // Discordにメッセージを送信
 async fn send_discord_message(
     message: String,
     secrets: &shuttle_runtime::SecretStore,
-) -> Result<(), Box<dyn error::Error>> {
+) -> Result<(), Box<dyn std::error::Error>> {
     // Discordへのメッセージ送信
     let discord_webhook_url: String = secrets
         .get("DISCORD_WEBHOOK_URL")
@@ -202,9 +225,9 @@ async fn send_discord_message(
 
     // POSTリクエストの結果を確認
     if res.status().is_success() {
-        println!("Send message to Discord: {}", message);
+        println!("Send message to Discord:\n{}", message);
     } else {
-        println!("Failed to send message to Discord: {:?}", res);
+        println!("Failed to send message to Discord:\n{:?}", res);
     }
 
     Ok(())
