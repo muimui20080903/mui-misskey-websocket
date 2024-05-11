@@ -43,7 +43,7 @@ async fn shuttle_main(
                 }
 
                 // ディレイ
-                std::thread::sleep(std::time::Duration::from_secs(1));
+                std::thread::sleep(std::time::Duration::from_secs(60));
             }
 
             // データがない場合
@@ -52,7 +52,7 @@ async fn shuttle_main(
                 // 再接続処理
                 client = connect_to_misskey_streaming_api(&id, &secrets).await;
                 // ディレイ
-                std::thread::sleep(std::time::Duration::from_secs(1));
+                std::thread::sleep(std::time::Duration::from_secs(60));
                 continue;
             }
 
