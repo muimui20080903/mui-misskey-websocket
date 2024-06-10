@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use serde_json::{json, Map, Value};
 use websocket::{
     client::sync::Client, stream::sync::NetworkStream, ClientBuilder, Message, OwnedMessage,
@@ -7,6 +9,7 @@ use websocket::{
 async fn shuttle_main(
     #[shuttle_runtime::Secrets] secrets: shuttle_runtime::SecretStore,
 ) -> Result<MyService, shuttle_runtime::Error> {
+
     // チャンネルへの接続ごとのid
     //  適当な文字列
     let id: String = String::from("awf2nawo0w8a3");
@@ -15,6 +18,8 @@ async fn shuttle_main(
         connect_to_misskey_streaming_api(&id, &secrets).await;
 
     println!("Connected to Misskey Streaming API");
+
+    let duration:Duration = std::time::Duration::from_secs(2);
 
     // メッセージの受信
     // ループしてメッセージを受信
@@ -43,7 +48,7 @@ async fn shuttle_main(
                 }
 
                 // ディレイ
-                std::thread::sleep(std::time::Duration::from_secs(60));
+                std::thread::sleep(duration);
             }
 
             // データがない場合
@@ -52,7 +57,7 @@ async fn shuttle_main(
                 // 再接続処理
                 client = connect_to_misskey_streaming_api(&id, &secrets).await;
                 // ディレイ
-                std::thread::sleep(std::time::Duration::from_secs(60));
+                std::thread::sleep(duration);
                 continue;
             }
 
